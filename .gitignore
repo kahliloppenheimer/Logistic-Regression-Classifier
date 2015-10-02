@@ -52,3 +52,5 @@ node_modules/
 # Datasets
 names/
 yelp_reviews.json
+.idea
+pa2.pdf
