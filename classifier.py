@@ -4,6 +4,7 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from cPickle import dump, load, HIGHEST_PROTOCOL as HIGHEST_PICKLE_PROTOCOL
+import numpy
 
 class Classifier(object):
     """An abstract text classifier.
