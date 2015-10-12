@@ -7,11 +7,9 @@ etc.; to the classifier they are merely instances with features."""
 from abc import ABCMeta, abstractmethod
 from collections import Counter
 from glob import glob
-import os
 from os.path import basename, dirname, split, splitext
 from itertools import islice, izip
-from cPickle import dump, load, HIGHEST_PROTOCOL as HIGHEST_PICKLE_PROTOCOL
-import numpy
+import numpy as np
 import json
 import re
 import time
@@ -57,23 +55,31 @@ class Name(Document):
     def oneHotCharEncoding(self, char):
         arr = [0] * 26
         arr[ord(char) - ord('a')] = 1
-        return arr
+        return np.array(arr)
 
     def bagOfChars(self, text):
         arr = [0] * 26
         for char in text:
             arr[ord(char) - ord('a')] += 1
-        return arr
+        return np.array(arr)
 
     def setOfChars(self, text):
         arr = [0] * 26
         for char in text:
             arr[ord(char) - ord('a')] = 1
-        return arr
+        return np.array(arr)
 
 class Review(Document):
 
+    def __init__(self, data, label=None, source=None):
+        super(Review, self).__init__(data, label, source)
+        # Encoded feature vector cached so we do not recompute
+        self.encoded = None
+
     def features(self):
+        return self.encoded if self.encoded is not None else self.unencodedFeatures()
+
+    def unencodedFeatures(self):
         normalized = self.normalize(self.data)
         return self.unigrams(normalized)
 
@@ -90,6 +96,9 @@ class Review(Document):
     def stripNonAlphaNum(self, text):
         from unicodedata import category
         return ''.join(ch for ch in text if category(ch)[0] != 'P')
+
+    def setEncoded(self, encoded):
+        self.encoded = encoded
 
 class Corpus(object):
     """An abstract collection of documents."""
@@ -151,7 +160,7 @@ class NamesCorpus(PlainTextLines):
         with open(datafile, "r") as file:
             for line in file:
                 data = line.strip()
-                self.documents.append(document_class(data, label, datafile).features())
+                self.documents.append(document_class(data, label, datafile))
 
 class ReviewCorpus(Corpus):
     """Yelp dataset challenge. A collection of business reviews. 
@@ -159,23 +168,14 @@ class ReviewCorpus(Corpus):
     def __init__(self, datafiles, document_class=Review):
         self.featureIdxMap = {}
         self.idxFeatureMap = {}
-        self.SAVED_VECTOR_EXTENSION = "p"
         super(ReviewCorpus, self).__init__(datafiles, document_class)
 
     def load(self, jsonFile, document_class=Review):
-        vectorFile = jsonFile.split('.')[0] + '.' + self.SAVED_VECTOR_EXTENSION
-        if os.path.isfile(vectorFile):
-            self.documents = self.loadVectorsFromFile(vectorFile)
-        else:
-            self.documents = self.readAndConvertJsonToVectors(jsonFile)
-            self.saveVectorsToFile(vectorFile)
-
-        """Make an unencoded document from each row of a json-formatted Yelp reviews
-        """
+        self.documents = self.readDocumentsFromJson(jsonFile)
 
     # Convert JSON to vectors
-    def readAndConvertJsonToVectors(self, jsonFile, document_class=Review):
-        unencoded = []
+    def readDocumentsFromJson(self, jsonFile, document_class=Review):
+        reviews = []
         counter = 1
         start = time.time()
         with open(jsonFile, "r") as vectorFile:
@@ -184,53 +184,25 @@ class ReviewCorpus(Corpus):
                 label = review['sentiment']
                 data = review['text']
                 instance = document_class(data, label, jsonFile)
-                unencoded.append(instance)
+                reviews.append(instance)
                 self.encodeFeatureIdxs(instance)
                 if counter % 20000 == 0:
                     print 'Loaded ', counter, ' instances'
                     print 'Unique # features = ', len(self.featureIdxMap)
                 counter += 1
         end = time.time()
-        print 'finished loading in ', end - start
+        print 'finished loading reviews in ', end - start
         start = time.time()
-        encoded = [self.encodeAsVec(instance.features()) for instance in unencoded]
+        for instance in reviews:
+            instance.setEncoded(encodeAsVec(instance.unencodedFeatures(), self.featureIdxMap))
         end = time.time()
         print 'finished encoding as featureVectors in ', end - start
-        return encoded
-
-    # Saves vectors along with feature index map to given file
-    def saveVectorsToFile(self, file):
-        """Save the current model to the given file."""
-        if isinstance(file, basestring):
-            with open(file, "wb") as file:
-                self.saveVectorsToFile(file)
-        else:
-            print 'saving vectors to ', file.name
-            start = time.time()
-            dump([self.featureIdxMap, self.documents], file, HIGHEST_PICKLE_PROTOCOL)
-            end = time.time()
-            print 'Finished saving vectors to file in ', end - start, 's'
-
-    # Loads vectors along with feature index map from file
-    def loadVectorsFromFile(self, file):
-        """Load a saved model from the given file."""
-        if isinstance(file, basestring):
-            with open(file, "rb") as file:
-                self.loadVectorsFromFile(file)
-        else:
-            print 'loading vectors from ', file
-            start = time.time()
-            loaded = load(file)
-            self.featureIdxMap = loaded[0]
-            self.documents = loaded[1]
-            end = time.time()
-            print 'Finished loading vectors from file in ', end - start, 's'
-
+        return reviews
 
     # Appends unseen features of this instance to the map of
     # {feature_name -> feature_idx_in_vector}
     def encodeFeatureIdxs(self, instance):
-        for feature in instance.features():
+        for feature in instance.unencodedFeatures():
             if feature not in self.featureIdxMap:
                 nextIdx = len(self.featureIdxMap)
                 self.featureIdxMap[feature] = nextIdx
@@ -244,30 +216,26 @@ class ReviewCorpus(Corpus):
     def getIdxToFeatureMap(self):
         return self.idxFeatureMap
 
-    # Takes in an encoding as a dict (i.e. {('The', 'Boy') -> 3, ...}
-    # and returns encoding as vec [0, 0, ..., 3, ..., 0] based on mapping
-    # of features to their indexes in the featureVector
-    def encodeAsVec(self, featureDict):
-        vec = numpy.zeros(len(self.featureIdxMap))
-        for feature in featureDict:
-            if feature in self.featureIdxMap:
-                idx = self.featureIdxMap[feature]
-                vec[idx] = featureDict[feature]
-        return vec
+# Takes in an encoding as a dict (i.e. {('The', 'Boy') -> 3, ...}
+# and returns encoding as vec [0, 0, ..., 3, ..., 0] based on mapping
+# of features to their indexes in the featureVector
+def encodeAsVec(unencodedFeatureDict, featureIdxMap):
+    vec = np.zeros(len(featureIdxMap))
+    for feature in unencodedFeatureDict:
+        if feature in featureIdxMap:
+            idx = featureIdxMap[feature]
+            vec[idx] = unencodedFeatureDict[feature]
+    return vec
 
-    # Takes in an instance encoded as a feature vector (i.e. [0, 1, ... , 3, 0]
-    # and returns it encoded as a dictionary (i.e. {'Girl' -> 5, ..., 'What' -> 7}
-    def decodeVec(self, featureVec):
-        dict = {}
-        for idx, val in enumerate(featureVec):
-            dict[self.idxFeatureMap[idx]] = val
-        return dict
+# Takes in an instance encoded as a feature vector (i.e. [0, 1, ... , 3, 0]
+# and returns it encoded as a dictionary (i.e. {'Girl' -> 5, ..., 'What' -> 7}
+def decodeVec(featureVec, idxFeatureMap):
+    decoded = Counter()
+    for idx, val in enumerate(featureVec):
+        if val != 0:
+            decoded[idxFeatureMap[idx]] = int(val)
+    return decoded
 
-nc = NamesCorpus()
-print 'sample vec = ', nc.documents[0]
-
-
-#rc = ReviewCorpus('yelp_reviews.json', Review)
 #print 'sample featureVec = ', rc.documents[0]
 #print(rc.decodeVec(rc.encodeAsVec({u'the': 2, u'and': 3, u'forrealz': 1})) == {u'the': 2, u'and': 3, u'forrealz': 1})
 #print(rc.encodeAsVec({u'the': 3, u'and': 3, u'forrealz': 1}) != rc.encodeAsVec({u'the': 2, u'and': 3, u'forrealz': 1}))

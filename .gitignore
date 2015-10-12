@@ -51,6 +51,6 @@ node_modules/
 
 # Datasets
 names/
-yelp_reviews.json
+*.json
 .idea
 pa2.pdf
