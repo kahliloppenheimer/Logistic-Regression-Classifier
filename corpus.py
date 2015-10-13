@@ -167,7 +167,8 @@ class ReviewCorpus(Corpus):
     """
     def __init__(self, datafiles, document_class=Review):
         self.featureIdxMap = {}
-        self.idxFeatureMap = {}
+        self.labelIdxMap = {}
+        self.labels = []
         super(ReviewCorpus, self).__init__(datafiles, document_class)
 
     def load(self, jsonFile, document_class=Review):
@@ -182,6 +183,8 @@ class ReviewCorpus(Corpus):
             for line in vectorFile:
                 review = json.loads(line)
                 label = review['sentiment']
+                if label not in self.labels:
+                    self.labels.append(label)
                 data = review['text']
                 instance = document_class(data, label, jsonFile)
                 reviews.append(instance)
@@ -191,10 +194,13 @@ class ReviewCorpus(Corpus):
                     print 'Unique # features = ', len(self.featureIdxMap)
                 counter += 1
         end = time.time()
+        # Initialize map of labels -> idxs
+        for label in self.labels:
+            self.labelIdxMap[label] = len(self.labelIdxMap) + len(self.featureIdxMap)
         print 'finished loading reviews in ', end - start
         start = time.time()
         for instance in reviews:
-            instance.setEncoded(encodeAsVec(instance.unencodedFeatures(), self.featureIdxMap))
+            instance.setEncoded(encodeAsVec(instance, self.featureIdxMap, self.labelIdxMap))
         end = time.time()
         print 'finished encoding as featureVectors in ', end - start
         return reviews
@@ -204,27 +210,24 @@ class ReviewCorpus(Corpus):
     def encodeFeatureIdxs(self, instance):
         for feature in instance.unencodedFeatures():
             if feature not in self.featureIdxMap:
-                nextIdx = len(self.featureIdxMap)
-                self.featureIdxMap[feature] = nextIdx
-                self.idxFeatureMap[nextIdx] = feature
+                self.featureIdxMap[feature] = len(self.featureIdxMap)
 
     # Returns map of {feature_name -> feature_idx_in_vectpr}
     def getFeatureToIdxMap(self):
         return self.featureIdxMap
 
-    # Returns map of {feature_idx_in_vector -> feature_name}
-    def getIdxToFeatureMap(self):
-        return self.idxFeatureMap
-
 # Takes in an encoding as a dict (i.e. {('The', 'Boy') -> 3, ...}
 # and returns encoding as vec [0, 0, ..., 3, ..., 0] based on mapping
 # of features to their indexes in the featureVector
-def encodeAsVec(unencodedFeatureDict, featureIdxMap):
-    vec = np.zeros(len(featureIdxMap))
+def encodeAsVec(instance, featureIdxMap, labelIdxMap):
+    unencodedFeatureDict = instance.unencodedFeatures()
+    vec = np.zeros(len(featureIdxMap) + len(labelIdxMap))
     for feature in unencodedFeatureDict:
         if feature in featureIdxMap:
             idx = featureIdxMap[feature]
             vec[idx] = unencodedFeatureDict[feature]
+    # Encode prior/bias probability
+    vec[labelIdxMap[instance.label]] = 1
     return vec
 
 # Takes in an instance encoded as a feature vector (i.e. [0, 1, ... , 3, 0]
@@ -235,8 +238,3 @@ def decodeVec(featureVec, idxFeatureMap):
         if val != 0:
             decoded[idxFeatureMap[idx]] = int(val)
     return decoded
-
-#print 'sample featureVec = ', rc.documents[0]
-#print(rc.decodeVec(rc.encodeAsVec({u'the': 2, u'and': 3, u'forrealz': 1})) == {u'the': 2, u'and': 3, u'forrealz': 1})
-#print(rc.encodeAsVec({u'the': 3, u'and': 3, u'forrealz': 1}) != rc.encodeAsVec({u'the': 2, u'and': 3, u'forrealz': 1}))
-#print(rc.encodeAsVec({u'ther': 2, u'and': 3, u'forrealz': 1}) != rc.encodeAsVec({u'the': 2, u'and': 3, u'forrealz': 1}))

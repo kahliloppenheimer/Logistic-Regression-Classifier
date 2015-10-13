@@ -29,7 +29,7 @@ class MaxEnt(Classifier):
     # Trains this classifier using stochastic gradient descent
     def train_sgd(self, train_instances, dev_instances, learning_rate, batch_size):
         self.labelsToWeights = self.initializeWeights(train_instances)
-        for i in range(10):
+        for i in range(20):
             negLogLikelihood = self.negLogLikelihood(train_instances)
             for i in range(0, len(train_instances), batch_size):
                 batch = train_instances[i : (i + batch_size)]
