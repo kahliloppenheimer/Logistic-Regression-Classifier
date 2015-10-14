@@ -71,9 +71,8 @@ class MaxEntTest(TestCase):
         self.assertAlmostEqual(gradient['dog'][0], -.89879, 4)
         self.assertAlmostEqual(gradient['dog'][1], -1.87339, 4)
 
-    def split_names_corpus(self, document_class=Name):
+    def split_names_corpus(self, names):
         """Split the names corpus into training, dev, and test sets"""
-        names = NamesCorpus(document_class=document_class)
         self.assertEqual(len(names), 5001 + 2943) # see names/README
         seed(hash("names"))
         shuffle(names)
@@ -81,7 +80,8 @@ class MaxEntTest(TestCase):
 
     def test_names_nltk(self):
         """Classify names using NLTK features"""
-        train, dev, test = self.split_names_corpus()
+        names = NamesCorpus(document_class=Name)
+        train, dev, test = self.split_names_corpus(names)
         classifier = MaxEnt()
         classifier.train(train, dev)
         acc = accuracy(classifier, test)
@@ -96,10 +96,12 @@ class MaxEntTest(TestCase):
 
     def test_reviews(self):
         """Classify sentiment using bag-of-words"""
-        reviews = ReviewCorpus('yelp_reviews_short.json', document_class=Review)
+        reviews = ReviewCorpus('yelp_reviews.json', document_class=Review, numLines=15000)
         train, dev, test = self.split_review_corpus(reviews)
+        print 'train length = ', len(train), ' dev length = ', len(dev), ' test length = ', len(test)
+        print 'number of features = ', len(train[0].features())
         classifier = MaxEnt()
-        classifier.train(train, dev, reviews.featureIdxMap)
+        classifier.train(train, dev)
         self.assertGreater(accuracy(classifier, test), 0.55)
 
 if __name__ == '__main__':

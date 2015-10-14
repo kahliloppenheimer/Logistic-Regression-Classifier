@@ -1,42 +1,35 @@
 # -*- mode: Python; coding: utf-8 -*-
-
 from __future__ import division
 from collections import defaultdict
-
 from classifier import Classifier
 import numpy as np
+import sys
 import math
-import corpus
-
 
 class MaxEnt(Classifier):
 
     def __init__(self, model=None):
         super(MaxEnt, self).__init__(model=None)
         self.labelsToWeights = None
-        self.featuresToIdxs = {}
+        self.NUM_ITERATIONS = 10 # Fixed number of iterations of SGD
 
     def get_model(self): return self.labelsToWeights;
-
     def set_model(self, model): pass
-
     model = property(get_model, set_model)
 
-    def train(self, instances, dev_instances=None, featuresToIdxs=None):
-        self.featuresToIdxs = featuresToIdxs
-        self.train_sgd(instances, dev_instances, 0.0001, 30)
+    def train(self, instances, dev_instances=None):
+        self.train_sgd(instances, dev_instances, 0.001, 30)
 
     # Trains this classifier using stochastic gradient descent
     def train_sgd(self, train_instances, dev_instances, learning_rate, batch_size):
         self.labelsToWeights = self.initializeWeights(train_instances)
-        for i in range(20):
-            negLogLikelihood = self.negLogLikelihood(train_instances)
+        for j in range(self.NUM_ITERATIONS):
             for i in range(0, len(train_instances), batch_size):
                 batch = train_instances[i : (i + batch_size)]
                 gradient = self.gradient(batch)
                 for label in self.labelsToWeights:
                     self.labelsToWeights[label] += learning_rate * gradient[label]
-            print 'negLogLikelihood = ', negLogLikelihood
+            print 'negLogLikelihood = ',self.negLogLikelihood(dev_instances)
 
     # Classifies the given instance as the most likely label from the dataset,
     # given the current model
@@ -46,7 +39,7 @@ class MaxEnt(Classifier):
             posteriors[label] = self.posterior(label, instance.features())
         return max(posteriors, key=posteriors.get)
 
-    # Initializes model weights to zero vectors
+    # Initializes model parameter weights to zero
     def initializeWeights(self, train_instances):
         labels = {}
         numFeatures = len(train_instances[0].features())
@@ -73,13 +66,10 @@ class MaxEnt(Classifier):
     # Returns the expected model counts (right hand sand of gradient difference)
     # given a mini batch of instances
     def expectedModelCounts(self, instances):
-        # initialize expected counts for each label
         expectedCounts = defaultdict(lambda: np.zeros(len(instances[0].features())))
-        # Iterate through instances and calculate expected counts
         for instance in instances:
             for label, w in self.labelsToWeights.iteritems():
                 posterior = self.posterior(label, instance.features())
-                # print 'p(', label, ' | ', instance.features(), ') = ', posterior
                 expectedCounts[label] += instance.features() * posterior
         return expectedCounts
 
@@ -94,10 +84,11 @@ class MaxEnt(Classifier):
 
     # Computes the negative log-likelihood over a set of instances
     def negLogLikelihood(self, instances):
-        logLikelihood = 0.0
-        for instance in instances:
-            logLikelihood += math.log(self.posterior(instance.label, instance.features()))
-        return logLikelihood * -1
+        return -1 * sum([math.log(self.posterior(instance.label, instance.features())) for instance in instances])
+
+    # Computes the accuracy of the classifier over a set of instances
+    def accuracy(self, instances):
+        return sum([instance.label == self.classify(instance) for instance in instances]) / len(instances)
 
 # Returns e^(w dot x)
 def expDotProd(w, x):
