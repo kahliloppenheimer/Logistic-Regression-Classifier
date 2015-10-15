@@ -14,7 +14,7 @@ class MaxEnt(Classifier):
         self.NUM_ITERATIONS = 10 # Fixed number of iterations of SGD
 
     def get_model(self): return self.labelsToWeights;
-    def set_model(self, model): pass
+    def set_model(self, model): self.labelsToWeights = model
     model = property(get_model, set_model)
 
     def train(self, instances, dev_instances=None):

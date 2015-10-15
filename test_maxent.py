@@ -104,6 +104,18 @@ class MaxEntTest(TestCase):
         classifier.train(train, dev)
         self.assertGreater(accuracy(classifier, test), 0.55)
 
+    def test_save_load(self):
+        reviews = ReviewCorpus('yelp_reviews.json', document_class=Review, numLines=5000)
+        train, dev, test = self.split_review_corpus(reviews)
+        classifier1 = MaxEnt()
+        classifier1.train(train, dev)
+        classifier1.save('trained.model')
+        classifier2 = MaxEnt()
+        classifier2.load('trained.model')
+        for doc in reviews[:500]:
+            self.assertEqual(classifier1.classify(doc), classifier2.classify(doc))
+
+
 if __name__ == '__main__':
     # Run all of the tests, print the results, and exit.
     main(verbosity=2)
