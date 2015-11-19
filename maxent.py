@@ -3,7 +3,6 @@ from __future__ import division
 from collections import defaultdict
 from classifier import Classifier
 import numpy as np
-import sys
 import math
 
 class MaxEnt(Classifier):
