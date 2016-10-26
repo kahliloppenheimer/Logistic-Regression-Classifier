@@ -13,7 +13,7 @@ import numpy as np
 import json
 import re
 import time
-import random
+from random import seed, shuffle
 
 
 class Document(object):
@@ -177,7 +177,7 @@ class NamesCorpus(PlainTextLines):
             self.labelIdxMap[label] = len(self.documents[0].features()) + len(self.labelIdxMap) - 2
 
 class ReviewCorpus(Corpus):
-    """Yelp dataset challenge. A collection of business reviews. 
+    """Yelp dataset challenge. A collection of business reviews.
     """
     def __init__(self, datafiles, document_class=Review, numLines=None):
         self.featureIdxMap = {}
@@ -193,12 +193,16 @@ class ReviewCorpus(Corpus):
         reviews = []
         start = time.time()
         with open(jsonFile, "r") as vectorFile:
-            totalLines = sum(1.0 for line in vectorFile) if numLines else 1.0
-            pctToRead = (numLines / totalLines) + .05 # .05 used to 'ensure' we reach right number
+            totalLines = sum(1 for line in vectorFile) if numLines else 1
+            pctToRead = (numLines / totalLines) # .05 used to 'ensure' we reach right number
             print 'reading ', numLines, '/', totalLines, '(', 100 * pctToRead, '% )'
+        seed('testing')
+        linesToRead = [x for x in range(0, totalLines)]
+        shuffle(linesToRead)
+        linesToRead = set(linesToRead[:numLines])
         with open(jsonFile, "r") as vectorFile:
-            for line in vectorFile:
-                if random.random() <= pctToRead and len(reviews) < numLines:
+            for lineNum, line in enumerate(vectorFile):
+                if lineNum in linesToRead:
                     review = json.loads(line)
                     label = review['sentiment']
                     if label not in self.labels:
