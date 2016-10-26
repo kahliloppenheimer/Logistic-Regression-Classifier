@@ -1,5 +1,5 @@
 # Maximum Entropy (Multinomial Logistic Regression) Classifier
-This is my implementation of a maximum entropy (multinomial logistic regression) classifier, trained on the yelp dataset to classify sentiment of text. On average test runs, this implementation takes ~43s on my macbook to extract, regularlize, train and evaluate on 15,000 randomly selected samples from the Yelp dataset. In its current configuration, classifier's accuracy averages between 72-74% on the yelp dataset. My classifier is configured to split the data into 70% training, 10% dev, and 20% evaluation.
+This is my implementation of a maximum entropy (logistic regression) classifier, trained on the yelp dataset to classify sentiment of text. On average test runs, this implementation takes ~43s on my macbook to extract, regularlize, train and evaluate on 15,000 randomly selected samples from the Yelp dataset. In its current configuration, classifier's accuracy averages between 72-74% on the yelp dataset. My classifier is configured to split the data into 70% training, 10% dev, and 20% evaluation.
 
 # How to run
 Look through test_maxent for examples on how to train/classify. Here are the key functions to look at.
